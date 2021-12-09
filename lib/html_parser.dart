@@ -13,12 +13,12 @@ import 'package:flutter_html/src/anchor.dart';
 import 'package:flutter_html/src/css_parser.dart';
 import 'package:flutter_html/src/html_elements.dart';
 import 'package:flutter_html/src/layout_element.dart';
-import 'package:flutter_html/src/navigation_delegate.dart';
 import 'package:flutter_html/src/utils.dart';
 import 'package:flutter_html/style.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as htmlparser;
 import 'package:numerus/numerus.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 typedef OnTap = void Function(
     String? url,
@@ -59,9 +59,6 @@ class HtmlParser extends StatelessWidget {
   final NavigationDelegate? navigationDelegateForIframe;
   final OnTap? _onAnchorTap;
   final TextSelectionControls? selectionControls;
-  final ScrollPhysics? scrollPhysics;
-
-  final Map<String, Size> cachedImageSizes = {};
 
   HtmlParser({
     required this.key,
@@ -79,8 +76,7 @@ class HtmlParser extends StatelessWidget {
     required this.imageRenders,
     required this.tagsList,
     required this.navigationDelegateForIframe,
-    this.selectionControls,
-    this.scrollPhysics,
+    this.selectionControls
   })  : this._onAnchorTap = onAnchorTap != null
           ? onAnchorTap
           : key != null
@@ -132,7 +128,6 @@ class HtmlParser extends StatelessWidget {
           style: cleanedTree.style,
         ),
         selectionControls: selectionControls,
-        scrollPhysics: scrollPhysics,
       );
     }
     return StyledText(
@@ -216,7 +211,7 @@ class HtmlParser extends StatelessWidget {
       } else if (INTERACTABLE_ELEMENTS.contains(node.localName)) {
         return parseInteractableElement(node, children);
       } else if (REPLACED_ELEMENTS.contains(node.localName)) {
-        return parseReplacedElement(node, children, navigationDelegateForIframe);
+        return parseReplacedElement(node, navigationDelegateForIframe);
       } else if (LAYOUT_ELEMENTS.contains(node.localName)) {
         return parseLayoutElement(node, children);
       } else if (TABLE_CELL_ELEMENTS.contains(node.localName)) {
@@ -403,11 +398,9 @@ class HtmlParser extends StatelessWidget {
       );
     } else if (tree.style.display == Display.LIST_ITEM) {
       List<InlineSpan> getChildren(StyledElement tree) {
+        InlineSpan tabSpan = WidgetSpan(child: Text("\t", textAlign: TextAlign.right));
         List<InlineSpan> children = tree.children.map((tree) => parseTree(newContext, tree)).toList();
         if (tree.style.listStylePosition == ListStylePosition.INSIDE) {
-          final tabSpan = WidgetSpan(
-            child: Text("\t", textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w400)),
-          );
           children.insert(0, tabSpan);
         }
         return children;
@@ -426,20 +419,25 @@ class HtmlParser extends StatelessWidget {
             children: [
               tree.style.listStylePosition == ListStylePosition.OUTSIDE ?
               Padding(
-                padding: tree.style.padding?.nonNegative ?? EdgeInsets.only(left: tree.style.direction != TextDirection.rtl ? 10.0 : 0.0, right: tree.style.direction == TextDirection.rtl ? 10.0 : 0.0),
-                child: newContext.style.markerContent
+                padding: tree.style.padding ?? EdgeInsets.only(left: tree.style.direction != TextDirection.rtl ? 10.0 : 0.0, right: tree.style.direction == TextDirection.rtl ? 10.0 : 0.0),
+                child: Text(
+                    "${newContext.style.markerContent}",
+                    textAlign: TextAlign.right,
+                    style: newContext.style.generateTextStyle()
+                ),
               ) : Container(height: 0, width: 0),
-              Text("\t", textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w400)),
+              Text("\t", textAlign: TextAlign.right),
               Expanded(
                   child: Padding(
                       padding: tree.style.listStylePosition == ListStylePosition.INSIDE ?
                         EdgeInsets.only(left: tree.style.direction != TextDirection.rtl ? 10.0 : 0.0, right: tree.style.direction == TextDirection.rtl ? 10.0 : 0.0) : EdgeInsets.zero,
                       child: StyledText(
                         textSpan: TextSpan(
-                          children: getChildren(tree)..insertAll(0, tree.style.listStylePosition == ListStylePosition.INSIDE ?
-                            [
-                              WidgetSpan(alignment: PlaceholderAlignment.middle, child: newContext.style.markerContent ?? Container(height: 0, width: 0))
-                            ] : []),
+                          text: (tree.style.listStylePosition ==
+                              ListStylePosition.INSIDE)
+                              ? '${newContext.style.markerContent}'
+                              : null,
+                          children: getChildren(tree),
                           style: newContext.style.generateTextStyle(),
                         ),
                         style: newContext.style,
@@ -453,12 +451,12 @@ class HtmlParser extends StatelessWidget {
       );
     } else if (tree is ReplacedElement) {
       if (tree is TextContentElement) {
-        return TextSpan(text: tree.text?.transformed(tree.style.textTransform));
+        return TextSpan(text: tree.text);
       } else {
         return WidgetSpan(
           alignment: tree.alignment,
           baseline: TextBaseline.alphabetic,
-          child: tree.toWidget(newContext)!,
+          child: tree.toWidget(context)!,
         );
       }
     } else if (tree is InteractableElement) {
@@ -710,10 +708,7 @@ class HtmlParser extends StatelessWidget {
   /// bullet all list items according to the [ListStyleType] they have been given.
   static StyledElement _processListCharactersRecursive(
       StyledElement tree, ListQueue<Context> olStack) {
-    if (tree.style.listStylePosition == null) {
-      tree.style.listStylePosition = ListStylePosition.OUTSIDE;
-    }
-    if (tree.name == 'ol' && tree.style.listStyleType != null && tree.style.listStyleType!.type == "marker") {
+    if (tree.name == 'ol' && tree.style.listStyleType != null) {
       switch (tree.style.listStyleType!) {
         case ListStyleType.LOWER_LATIN:
         case ListStyleType.LOWER_ALPHA:
@@ -733,30 +728,23 @@ class HtmlParser extends StatelessWidget {
           olStack.add(Context<int>((tree.attributes['start'] != null ? int.tryParse(tree.attributes['start'] ?? "") ?? 1 : 1) - 1));
           break;
       }
-    } else if (tree.style.display == Display.LIST_ITEM && tree.style.listStyleType != null && tree.style.listStyleType!.type == "widget") {
-      tree.style.markerContent = tree.style.listStyleType!.widget!;
-    } else if (tree.style.display == Display.LIST_ITEM && tree.style.listStyleType != null && tree.style.listStyleType!.type == "image") {
-      tree.style.markerContent = Image.network(tree.style.listStyleType!.text);
     } else if (tree.style.display == Display.LIST_ITEM && tree.style.listStyleType != null) {
-      String marker = "";
       switch (tree.style.listStyleType!) {
-        case ListStyleType.NONE:
-          break;
         case ListStyleType.CIRCLE:
-          marker = '○';
+          tree.style.markerContent = '○';
           break;
         case ListStyleType.SQUARE:
-          marker = '■';
+          tree.style.markerContent = '■';
           break;
         case ListStyleType.DISC:
-          marker = '•';
+          tree.style.markerContent = '•';
           break;
         case ListStyleType.DECIMAL:
           if (olStack.isEmpty) {
             olStack.add(Context<int>((tree.attributes['start'] != null ? int.tryParse(tree.attributes['start'] ?? "") ?? 1 : 1) - 1));
           }
           olStack.last.data += 1;
-          marker = '${olStack.last.data}.';
+          tree.style.markerContent = '${olStack.last.data}.';
           break;
         case ListStyleType.LOWER_LATIN:
         case ListStyleType.LOWER_ALPHA:
@@ -771,7 +759,7 @@ class HtmlParser extends StatelessWidget {
               }
             }
           }
-          marker = olStack.last.data.toString() + ".";
+          tree.style.markerContent = olStack.last.data.toString() + ".";
           olStack.last.data = olStack.last.data.toString().nextLetter();
           break;
         case ListStyleType.UPPER_LATIN:
@@ -787,7 +775,7 @@ class HtmlParser extends StatelessWidget {
               }
             }
           }
-          marker = olStack.last.data.toString().toUpperCase() + ".";
+          tree.style.markerContent = olStack.last.data.toString().toUpperCase() + ".";
           olStack.last.data = olStack.last.data.toString().nextLetter();
           break;
         case ListStyleType.LOWER_ROMAN:
@@ -796,9 +784,9 @@ class HtmlParser extends StatelessWidget {
           }
           olStack.last.data += 1;
           if (olStack.last.data <= 0) {
-            marker = '${olStack.last.data}.';
+            tree.style.markerContent = '${olStack.last.data}.';
           } else {
-            marker = (olStack.last.data as int).toRomanNumeralString()!.toLowerCase() + ".";
+            tree.style.markerContent = (olStack.last.data as int).toRomanNumeralString()!.toLowerCase() + ".";
           }
           break;
         case ListStyleType.UPPER_ROMAN:
@@ -807,16 +795,12 @@ class HtmlParser extends StatelessWidget {
           }
           olStack.last.data += 1;
           if (olStack.last.data <= 0) {
-            marker = '${olStack.last.data}.';
+            tree.style.markerContent = '${olStack.last.data}.';
           } else {
-            marker = (olStack.last.data as int).toRomanNumeralString()! + ".";
+            tree.style.markerContent = (olStack.last.data as int).toRomanNumeralString()! + ".";
           }
           break;
       }
-      tree.style.markerContent = Text(
-          marker,
-          textAlign: TextAlign.right,
-      );
     }
 
     tree.children.forEach((e) => _processListCharactersRecursive(e, olStack));
@@ -962,7 +946,7 @@ class HtmlParser extends StatelessWidget {
       if (child is EmptyContentElement || child is EmptyLayoutElement) {
         toRemove.add(child);
       } else if (child is TextContentElement
-          && (tree.name == "body" || tree.name == "ul")
+          && tree.name == "body"
           && child.text!.replaceAll(' ', '').isEmpty) {
         toRemove.add(child);
       } else if (child is TextContentElement
@@ -1056,8 +1040,8 @@ class ContainerSpan extends StatelessWidget {
       ),
       height: style.height,
       width: style.width,
-      padding: style.padding?.nonNegative,
-      margin: style.margin?.nonNegative,
+      padding: style.padding,
+      margin: style.margin,
       alignment: shrinkWrap ? null : style.alignment,
       child: child ??
           StyledText(
@@ -1080,7 +1064,6 @@ class StyledText extends StatelessWidget {
   final AnchorKey? key;
   final bool _selectable;
   final TextSelectionControls? selectionControls;
-  final ScrollPhysics? scrollPhysics;
 
   const StyledText({
     required this.textSpan,
@@ -1089,7 +1072,6 @@ class StyledText extends StatelessWidget {
     required this.renderContext,
     this.key,
     this.selectionControls,
-    this.scrollPhysics,
   }) : _selectable = false,
         super(key: key);
 
@@ -1099,8 +1081,7 @@ class StyledText extends StatelessWidget {
     this.textScaleFactor = 1.0,
     required this.renderContext,
     this.key,
-    this.selectionControls,
-    this.scrollPhysics,
+    this.selectionControls
   }) : textSpan = textSpan,
         _selectable = true,
         super(key: key);
@@ -1116,7 +1097,6 @@ class StyledText extends StatelessWidget {
         textScaleFactor: textScaleFactor,
         maxLines: style.maxLines,
         selectionControls: selectionControls,
-        scrollPhysics: scrollPhysics,
       );
     }
     return SizedBox(

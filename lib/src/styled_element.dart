@@ -24,7 +24,7 @@ class StyledElement {
   }) : this._node = node;
 
   bool matchesSelector(String selector) =>
-      (_node != null && matches(_node as dom.Element, selector)) || name == selector;
+      _node != null && matches(_node as dom.Element, selector);
 
   Map<String, String> get attributes =>
       _node?.attributes.map((key, value) {
@@ -188,7 +188,7 @@ StyledElement parseStyledElement(
             ExpressionMapping.namedColorToColor(element.attributes['color']!) :
           null,
         fontFamily: element.attributes['face']?.split(",").first,
-        fontSize: element.attributes['size'] != null ? numberToFontSize(element.attributes['size']!) : null,
+        fontSize: numberToFontSize(element.attributes['size'] ?? ''),
       );
       break;
     case "h1":

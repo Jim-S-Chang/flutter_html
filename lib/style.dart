@@ -175,7 +175,7 @@ class Style {
   String? after;
   Border? border;
   Alignment? alignment;
-  Widget? markerContent;
+  String? markerContent;
 
   /// MaxLine
   ///
@@ -191,8 +191,6 @@ class Style {
   ///
   TextOverflow? textOverflow;
 
-  TextTransform? textTransform;
-
   Style({
     this.backgroundColor = Colors.transparent,
     this.color,
@@ -207,7 +205,7 @@ class Style {
     this.lineHeight,
     this.letterSpacing,
     this.listStyleType,
-    this.listStylePosition,
+    this.listStylePosition = ListStylePosition.OUTSIDE,
     this.padding,
     this.margin,
     this.textAlign,
@@ -227,7 +225,6 @@ class Style {
     this.markerContent,
     this.maxLines,
     this.textOverflow,
-    this.textTransform = TextTransform.none,
   }) {
     if (this.alignment == null &&
         (display == Display.BLOCK || display == Display.LIST_ITEM)) {
@@ -320,7 +317,6 @@ class Style {
       markerContent: other.markerContent,
       maxLines: other.maxLines,
       textOverflow: other.textOverflow,
-      textTransform: other.textTransform,
     );
   }
 
@@ -358,7 +354,6 @@ class Style {
       wordSpacing: child.wordSpacing ?? wordSpacing,
       maxLines: child.maxLines ?? maxLines,
       textOverflow: child.textOverflow ?? textOverflow,
-      textTransform: child.textTransform ?? textTransform,
     );
   }
 
@@ -393,10 +388,9 @@ class Style {
     String? after,
     Border? border,
     Alignment? alignment,
-    Widget? markerContent,
+    String? markerContent,
     int? maxLines,
     TextOverflow? textOverflow,
-    TextTransform? textTransform,
     bool? beforeAfterNull,
   }) {
     return Style(
@@ -434,7 +428,6 @@ class Style {
       markerContent: markerContent ?? this.markerContent,
       maxLines: maxLines ?? this.maxLines,
       textOverflow: textOverflow ?? this.textOverflow,
-      textTransform: textTransform ?? this.textTransform,
     );
   }
 
@@ -454,7 +447,6 @@ class Style {
     this.textShadow = textStyle.shadows;
     this.wordSpacing = textStyle.wordSpacing;
     this.lineHeight = LineHeight(textStyle.height ?? 1.2);
-    this.textTransform = TextTransform.none;
   }
 }
 
@@ -527,40 +519,22 @@ class LineHeight {
   static const normal = LineHeight(1.2);
 }
 
-class ListStyleType {
-  final String text;
-  final String type;
-  final Widget? widget;
-
-  const ListStyleType(this.text, {this.type = "marker", this.widget});
-
-  factory ListStyleType.fromImage(String url) => ListStyleType(url, type: "image");
-
-  factory ListStyleType.fromWidget(Widget widget) => ListStyleType("", widget: widget, type: "widget");
-
-  static const LOWER_ALPHA = ListStyleType("LOWER_ALPHA");
-  static const UPPER_ALPHA = ListStyleType("UPPER_ALPHA");
-  static const LOWER_LATIN = ListStyleType("LOWER_LATIN");
-  static const UPPER_LATIN = ListStyleType("UPPER_LATIN");
-  static const CIRCLE = ListStyleType("CIRCLE");
-  static const DISC = ListStyleType("DISC");
-  static const DECIMAL = ListStyleType("DECIMAL");
-  static const LOWER_ROMAN = ListStyleType("LOWER_ROMAN");
-  static const UPPER_ROMAN = ListStyleType("UPPER_ROMAN");
-  static const SQUARE = ListStyleType("SQUARE");
-  static const NONE = ListStyleType("NONE");
+enum ListStyleType {
+  LOWER_ALPHA,
+  UPPER_ALPHA,
+  LOWER_LATIN,
+  UPPER_LATIN,
+  CIRCLE,
+  DISC,
+  DECIMAL,
+  LOWER_ROMAN,
+  UPPER_ROMAN,
+  SQUARE,
 }
 
 enum ListStylePosition {
   OUTSIDE,
   INSIDE,
-}
-
-enum TextTransform {
-  uppercase,
-  lowercase,
-  capitalize,
-  none,
 }
 
 enum VerticalAlign {

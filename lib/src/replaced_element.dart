@@ -7,7 +7,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_html/html_parser.dart';
 import 'package:flutter_html/src/anchor.dart';
 import 'package:flutter_html/src/html_elements.dart';
-import 'package:flutter_html/src/navigation_delegate.dart';
 import 'package:flutter_html/src/utils.dart';
 import 'package:flutter_html/src/widgets/iframe_unsupported.dart'
   if (dart.library.io) 'package:flutter_html/src/widgets/iframe_mobile.dart'
@@ -17,6 +16,7 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:video_player/video_player.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 /// A [ReplacedElement] is a type of [StyledElement] that does not require its [children] to be rendered.
 ///
@@ -29,10 +29,9 @@ abstract class ReplacedElement extends StyledElement {
     required String name,
     required Style style,
     required String elementId,
-    List<StyledElement>? children,
     dom.Element? node,
     this.alignment = PlaceholderAlignment.aboveBaseline,
-  }) : super(name: name, children: children ?? [], style: style, node: node, elementId: elementId);
+  }) : super(name: name, children: [], style: style, node: node, elementId: elementId);
 
   static List<String?> parseMediaSources(List<dom.Element> elements) {
     return elements
@@ -231,24 +230,22 @@ class EmptyContentElement extends ReplacedElement {
 class RubyElement extends ReplacedElement {
   dom.Element element;
 
-  RubyElement({
-    required this.element,
-    required List<StyledElement> children,
-    String name = "ruby"
-  }) : super(name: name, alignment: PlaceholderAlignment.middle, style: Style(), elementId: element.id, children: children);
+  RubyElement({required this.element, String name = "ruby"})
+      : super(name: name, alignment: PlaceholderAlignment.middle, style: Style(), elementId: element.id);
 
   @override
   Widget toWidget(RenderContext context) {
-    String? textNode;
+    dom.Node? textNode;
     List<Widget> widgets = <Widget>[];
+    //TODO calculate based off of parent font size.
     final rubySize = max(9.0, context.style.fontSize!.size! / 2);
     final rubyYPos = rubySize + rubySize / 2;
-    context.tree.children.forEach((c) {
-      if (c is TextContentElement) {
-        textNode = c.text;
+    element.nodes.forEach((c) {
+      if (c.nodeType == dom.Node.TEXT_NODE) {
+        textNode = c;
       }
-      if (!(c is TextContentElement)) {
-        if (c.name == "rt" && textNode != null) {
+      if (c is dom.Element) {
+        if (c.localName == "rt" && textNode != null) {
           final widget = Stack(
             alignment: Alignment.center,
             children: <Widget>[
@@ -258,23 +255,12 @@ class RubyElement extends ReplacedElement {
                       child: Transform(
                           transform:
                               Matrix4.translationValues(0, -(rubyYPos), 0),
-                          child: ContainerSpan(
-                            newContext: RenderContext(
-                              buildContext: context.buildContext,
-                              parser: context.parser,
-                              style: c.style,
-                              tree: c,
-                            ),
-                            style: c.style,
-                            child: Text(c.element!.innerHtml,
-                                style: c.style
-                                    .generateTextStyle()
-                                    .copyWith(fontSize: rubySize)),
-                          )))),
-              ContainerSpan(
-                  newContext: context,
-                  style: context.style,
-                  child: Text(textNode!.trim(),
+                          child: Text(c.innerHtml,
+                              style: context.style
+                                  .generateTextStyle()
+                                  .copyWith(fontSize: rubySize))))),
+              Container(
+                  child: Text(textNode!.text!.trim(),
                       style: context.style.generateTextStyle())),
             ],
           );
@@ -375,7 +361,6 @@ class MathElement extends ReplacedElement {
 
 ReplacedElement parseReplacedElement(
   dom.Element element,
-  List<StyledElement> children,
   NavigationDelegate? navigationDelegateForIframe,
 ) {
   switch (element.localName) {
@@ -450,7 +435,6 @@ ReplacedElement parseReplacedElement(
     case "ruby":
       return RubyElement(
         element: element,
-        children: children,
       );
     case "math":
       return MathElement(
