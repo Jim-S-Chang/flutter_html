@@ -82,3 +82,7 @@ String getRandString(int len) {
   var values = List<int>.generate(len, (i) =>  random.nextInt(255));
   return base64UrlEncode(values);
 }
+
+extension ClampedEdgeInsets on EdgeInsetsGeometry {
+  EdgeInsetsGeometry get nonNegative => this.clamp(EdgeInsets.zero, const EdgeInsets.all(double.infinity));
+}
